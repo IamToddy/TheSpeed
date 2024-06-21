@@ -1,39 +1,46 @@
-<script>
-    const video = document.getElementById('video');
-    const speedDisplay = document.getElementById('speed');
-    let startTime, endTime;
-    const distanceInput = document.getElementById('distance');
+const video = document.getElementById('video');
+const speedDisplay = document.getElementById('speed');
 
-    // Tilgang til kameraet
-    async function initCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-            video.srcObject = stream;
-        } catch (error) {
-            console.error('Error accessing the camera', error);
-            alert('Kameraet kan ikke aksesseres. Vennligst sørg for at du gir tillatelse til å bruke kameraet og at du kjører dette over HTTPS.');
+async function initCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        video.srcObject = stream;
+    } catch (error) {
+        console.error('Error accessing the camera', error);
+        alert('Kameraet kan ikke aksesseres. Vennligst sørg for at du gir tillatelse til å bruke kameraet og at du kjører dette over HTTPS.');
+    }
+}
+
+async function detectObjects() {
+    const model = await cocoSsd.load();
+    video.addEventListener('loadeddata', async () => {
+        const predictions = await model.detect(video);
+
+        // Forenklet måte å finne bilen og beregne hastigheten (du må implementere dette mer presist)
+        const car = predictions.find(pred => pred.class === 'car');
+        if (car) {
+            const currentTime = new Date().getTime();
+            const currentPos = car.bbox;
+
+            if (lastPos) {
+                const timeElapsed = (currentTime - lastTime) / 1000; // i sekunder
+                const distance = Math.sqrt(
+                    Math.pow(currentPos[0] - lastPos[0], 2) + Math.pow(currentPos[1] - lastPos[1], 2)
+                );
+                const speedMps = distance / timeElapsed;
+                const speedKph = speedMps * 3.6;
+                speedDisplay.innerText = speedKph.toFixed(2);
+            }
+
+            lastTime = currentTime;
+            lastPos = currentPos;
         }
-    }
 
-    // Funksjon for å starte måling
-    function startMeasurement() {
-        startTime = new Date().getTime();
-        video.addEventListener('click', endMeasurement);
-    }
+        requestAnimationFrame(detectObjects);
+    });
+}
 
-    // Funksjon for å avslutte måling og beregne hastighet
-    function endMeasurement() {
-        endTime = new Date().getTime();
-        const distance = parseFloat(distanceInput.value);
-        const time = (endTime - startTime) / 1000; // tid i sekunder
-        const speedMps = distance / time;
-        const speedKph = speedMps * 3.6;
-        speedDisplay.innerText = speedKph.toFixed(2);
+let lastTime;
+let lastPos;
 
-        // Fjern event listener
-        video.removeEventListener('click', endMeasurement);
-    }
-
-    // Initialiser kameraet
-    initCamera();
-</script>
+initCamera().then(detectObjects);
